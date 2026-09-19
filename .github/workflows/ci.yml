@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.current }}
+      bumped: ${{ steps.version.outputs.bumped }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 이전 커밋의 @version 추출
+        id: version
+        run: |
+          FILE=naver-works-calculator.user.js
+          extract() { sed -n 's|^//[[:space:]]*@version[[:space:]]\{1,\}\([0-9][0-9.]*\).*|\1|p' | head -1; }
+
+          current=$(extract < "$FILE")
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+
+          if git rev-parse HEAD^ >/dev/null 2>&1 && git show "HEAD^:$FILE" >/dev/null 2>&1; then
+            prev=$(git show "HEAD^:$FILE" | extract)
+          else
+            prev=""
+          fi
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$prev" ] && [ "$prev" != "$current" ]; then
+            echo "bumped=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$prev" ]; then
+            echo "bumped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 스크립트 본문이 바뀌었는데 @version 을 안 올렸으면 실패시킨다.
+      # (Greasy Fork 는 버전이 올라간 경우에만 새 버전으로 배포한다)
+      - name: 스크립트 변경 여부 확인
+        id: changed
+        run: |
+          FILE=naver-works-calculator.user.js
+          if git rev-parse HEAD^ >/dev/null 2>&1 && ! git diff --quiet "HEAD^" HEAD -- "$FILE"; then
+            echo "script=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "script=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 검증
+        run: |
+          if [ "${{ steps.changed.outputs.script }}" = "true" ] && [ -n "${{ steps.version.outputs.prev }}" ]; then
+            node scripts/validate.mjs --prev "${{ steps.version.outputs.prev }}"
+          else
+            node scripts/validate.mjs
+          fi
+
+  release:
+    needs: validate
+    if: github.ref == 'refs/heads/main' && needs.validate.outputs.bumped == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 태그 + 릴리스 생성
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "v$VERSION 릴리스가 이미 존재합니다. 건너뜁니다."
+            exit 0
+          fi
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --generate-notes \
+            naver-works-calculator.user.js

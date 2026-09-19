@@ -1,0 +1,13 @@
+{
+  "name": "naver-works-calculator",
+  "private": true,
+  "description": "Naver Works 근로시간 합산 유저스크립트",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "bump": "node scripts/bump-version.mjs patch",
+    "bump:minor": "node scripts/bump-version.mjs minor",
+    "bump:major": "node scripts/bump-version.mjs major"
+  }
+}

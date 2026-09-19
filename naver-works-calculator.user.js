@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Naver Works Calculator
 // @namespace    http://tampermonkey.net/
-// @version      0.0.18
+// @version      0.0.19
 // @description  Calculate total work remain time
 // @author       K
 // @match        *://*.worksmobile.com/my-space/work-statistics
@@ -105,6 +105,8 @@
                 const totalMinutes = hours * 60 + minutes;
 
                 return {
+                    // 날짜 비교는 타임존 영향을 받지 않도록 원본 YYYYMMDD 문자열로 한다
+                    ymd: item.checkYmd,
                     checkYmd: new Date(
                         item.checkYmd.replace(
                             /(\d{4})(\d{2})(\d{2})/,
@@ -130,13 +132,24 @@
         return { fromDate, toDate };
     };
 
-    // workTimes → { workTimes, withHalfDayOff, withoutHalfDayOff }
+    // 오늘(로컬 기준) YYYYMMDD
+    const getTodayYmd = () => {
+        const now = new Date();
+        return `${now.getFullYear()}` +
+            `${String(now.getMonth() + 1).padStart(2, '0')}` +
+            `${String(now.getDate()).padStart(2, '0')}`;
+    };
+
+    // workTimes → { workTimes, total, totalUntilToday }
+    //   total           : 이번 달 전체. 오늘 이후에 등록된 반차/반반차 예정까지 반영한 값.
+    //   totalUntilToday : 오늘까지만 잘라서 합산. 미래 예정분이 섞이지 않은 "지금 시점" 값.
     const computeTotals = (workTimes) => {
-        const withHalfDayOff = calculateTotalRemainWork(workTimes);
-        const withoutHalfDayOff = calculateTotalRemainWork(
-            workTimes.filter(item => !HALF_DAY_OFF_MINUTES.includes(item.sumWorkTime))
+        const todayYmd = getTodayYmd();
+        const total = calculateTotalRemainWork(workTimes);
+        const totalUntilToday = calculateTotalRemainWork(
+            workTimes.filter(item => item.ymd <= todayYmd)
         );
-        return { workTimes, withHalfDayOff, withoutHalfDayOff };
+        return { workTimes, total, totalUntilToday };
     };
 
     const fetchWorkTimes = async (origin, userId) => {
@@ -177,25 +190,25 @@
             </div>
         </div>`;
 
-    const createTotalTimeRow = (withHalfDayOff, withoutHalfDayOff) => {
+    const createTotalTimeRow = (total, totalUntilToday) => {
         const row = document.createElement('div');
         row.id = STAT_ROW_ID;
         row.className = 'row';
         row.style.marginTop = '8px';
         row.innerHTML =
-            createStatColumn('총 추가 근로 시간 (반차 포함)', formatSignedHM(withHalfDayOff)) +
-            createStatColumn('총 추가 근로 시간 (반차 제외)', formatSignedHM(withoutHalfDayOff));
+            createStatColumn('총 추가 근로 시간 (전체)', formatSignedHM(total)) +
+            createStatColumn('총 추가 근로 시간 (오늘까지)', formatSignedHM(totalUntilToday));
         return row;
     };
 
     // 요약 박스를 못 찾을 때를 위한 폴백(기존 단순 박스)
-    const createTotalTimeBox = (withHalfDayOff, withoutHalfDayOff) => {
+    const createTotalTimeBox = (total, totalUntilToday) => {
         const el = document.createElement('div');
         el.className = 'colwrap-item searchStand p-5';
         el.innerHTML = `
             총 추가 근로 시간 :
-            반차 포함 ${formatTime(withHalfDayOff)} /
-            반차 제외 ${formatTime(withoutHalfDayOff)}
+            전체 ${formatTime(total)} /
+            오늘까지 ${formatTime(totalUntilToday)}
         `;
         return el;
     };
@@ -273,7 +286,7 @@
         return button;
     };
 
-    const updateDOM = (workTimes, withHalfDayOff, withoutHalfDayOff) => {
+    const updateDOM = (workTimes, total, totalUntilToday) => {
         if (document.getElementById(STAT_ROW_ID)) return; // 중복 주입 방지
 
         findSearchRow()?.appendChild(createDownloadButton(workTimes));
@@ -281,11 +294,11 @@
         const summaryBody = findSummaryBody();
         if (summaryBody) {
             // 네이티브 요약 박스 안에 동일 스타일의 행 추가
-            summaryBody.appendChild(createTotalTimeRow(withHalfDayOff, withoutHalfDayOff));
+            summaryBody.appendChild(createTotalTimeRow(total, totalUntilToday));
         } else {
             // 폴백: 기존 단순 박스
             findFormRow()?.appendChild(
-                createTotalTimeBox(withHalfDayOff, withoutHalfDayOff)
+                createTotalTimeBox(total, totalUntilToday)
             );
         }
     };
@@ -295,7 +308,7 @@
      * =============================== */
     // 홈의 "나의 근로 시간" 위젯(MyWorkingHours)에 총 추가 근로 시간 박스를 주입.
     // Vue 가 위젯을 다시 그려도 사라지지 않도록 주기적으로 보충한다.
-    const injectHomeBox = (withHalfDayOff, withoutHalfDayOff) => {
+    const injectHomeBox = (total, totalUntilToday) => {
         const widget = document.querySelector('[data-widget-component="MyWorkingHours"]');
         if (!widget) return false;
 
@@ -313,8 +326,8 @@
             <div class="my_work_hours">
                 <div class="title">총 추가 근로 시간</div>
                 <div class="work_hours">
-                    <strong>${formatSignedHM(withHalfDayOff)}</strong><span>포함</span>
-                    <strong style="margin-left:8px">${formatSignedHM(withoutHalfDayOff)}</strong><span>제외</span>
+                    <strong>${formatSignedHM(total)}</strong><span>전체</span>
+                    <strong style="margin-left:8px">${formatSignedHM(totalUntilToday)}</strong><span>오늘까지</span>
                 </div>
             </div>`;
 
@@ -374,15 +387,15 @@
         console.log('[NW Calculator] empId:', empId);
 
         const workTimes = await fetchWorkTimes(WORKPLACE_ORIGIN, empId);
-        const { withHalfDayOff, withoutHalfDayOff } = computeTotals(workTimes);
+        const { total, totalUntilToday } = computeTotals(workTimes);
 
-        console.log('[NW Calculator] Including half day off:', withHalfDayOff);
-        console.log('[NW Calculator] Excluding half day off:', withoutHalfDayOff);
+        console.log('[NW Calculator] Total (whole month):', total);
+        console.log('[NW Calculator] Total (until today):', totalUntilToday);
 
         // 위젯이 렌더링될 때까지 대기 + Vue 재렌더 대비 주기적 보충
-        injectHomeBox(withHalfDayOff, withoutHalfDayOff);
+        injectHomeBox(total, totalUntilToday);
         setInterval(
-            () => injectHomeBox(withHalfDayOff, withoutHalfDayOff),
+            () => injectHomeBox(total, totalUntilToday),
             1000
         );
         return;
@@ -399,11 +412,11 @@
     if (!userId) return;
 
     const workTimes = await fetchWorkTimes(location.origin, userId);
-    const { withHalfDayOff, withoutHalfDayOff } = computeTotals(workTimes);
+    const { total, totalUntilToday } = computeTotals(workTimes);
 
-    console.log('Including half day off:', withHalfDayOff);
-    console.log('Excluding half day off:', withoutHalfDayOff);
+    console.log('Total (whole month):', total);
+    console.log('Total (until today):', totalUntilToday);
 
-    updateDOM(workTimes, withHalfDayOff, withoutHalfDayOff);
+    updateDOM(workTimes, total, totalUntilToday);
 
 })();

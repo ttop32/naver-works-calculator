@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Naver Works Calculator
 // @namespace    http://tampermonkey.net/
-// @version      0.0.19
+// @version      0.0.20
 // @description  Calculate total work remain time
 // @author       K
 // @match        *://*.worksmobile.com/my-space/work-statistics
@@ -23,7 +23,6 @@
      * constants
      * =============================== */
     const BASE_WORK_MINUTES = 480; // 8시간
-    const HALF_DAY_OFF_MINUTES = [120, 240]; // 반차 / 반반차
     const WORKPLACE_ORIGIN = 'https://workplace.worksmobile.com';
     const HOME_BOX_ID = 'nw-calc-home-box';
 
@@ -231,13 +230,15 @@
             const yearMonth =
                   `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
+            const todayYmd = getTodayYmd();
+
             const csvHeader =
-                  '날짜,총 근로 시간(분),차이(분),반차제외 근로시간(분),반차제외 차이(분)\n';
+                  '날짜,총 근로 시간(분),차이(분),오늘까지 근로시간(분),오늘까지 차이(분)\n';
 
             let totalSumWorkTime = 0;
             let totalDiff = 0;
-            let totalSumWorkTimeWithoutHalf = 0;
-            let totalDiffWithoutHalf = 0;
+            let totalSumWorkTimeUntilToday = 0;
+            let totalDiffUntilToday = 0;
 
             const csvBody = workTimes
             .map(item => {
@@ -246,13 +247,13 @@
                 totalSumWorkTime += item.sumWorkTime;
                 totalDiff += item.diff;
 
-                // 반차
-                if (HALF_DAY_OFF_MINUTES.includes(item.sumWorkTime)) {
+                // 오늘 이후(미리 등록해 둔 예정분)는 '오늘까지' 컬럼에서 뺀다
+                if (item.ymd > todayYmd) {
                     return `${date},${item.sumWorkTime},${item.diff},,`;
                 }
 
-                totalSumWorkTimeWithoutHalf += item.sumWorkTime;
-                totalDiffWithoutHalf += item.diff;
+                totalSumWorkTimeUntilToday += item.sumWorkTime;
+                totalDiffUntilToday += item.diff;
 
                 return `${date},${item.sumWorkTime},${item.diff},${item.sumWorkTime},${item.diff}`;
             })
@@ -261,15 +262,15 @@
             // ✅ 합산 (분)
             const footerMinutes =
                   `\n합계(분),${totalSumWorkTime},${totalDiff},` +
-                  `${totalSumWorkTimeWithoutHalf},${totalDiffWithoutHalf}`;
+                  `${totalSumWorkTimeUntilToday},${totalDiffUntilToday}`;
 
             // ✅ 합산 (시간)
             const footerHours =
                   `\n합계(시간),` +
                   `${formatMinutesToHM(totalSumWorkTime)},` +
                   `${formatMinutesToHM(totalDiff)},` +
-                  `${formatMinutesToHM(totalSumWorkTimeWithoutHalf)},` +
-                  `${formatMinutesToHM(totalDiffWithoutHalf)}`;
+                  `${formatMinutesToHM(totalSumWorkTimeUntilToday)},` +
+                  `${formatMinutesToHM(totalDiffUntilToday)}`;
 
             const csvContent =
                   '﻿' + csvHeader + csvBody + footerMinutes + footerHours;

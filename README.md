@@ -36,20 +36,22 @@ Greasy Fork 에서 설치합니다 (Tampermonkey 필요):
 
 `@downloadURL` / `@updateURL` 은 Greasy Fork 를 가리키므로 기존 설치자는 그대로 유지됩니다.
 
-### Greasy Fork 자동 동기화 설정 (최초 1회)
+Greasy Fork 의 스크립트 설명(추가 정보)도 [docs/description.md](docs/description.md) 를 동기화하도록
+걸어뒀습니다. 설명을 고치려면 이 파일을 수정해 push 하면 됩니다.
 
-1. https://greasyfork.org/en/scripts/505884-naver-works-calculator/admin 접속
-2. **Sync** 탭 → *Sync type* 을 `Automatic` 으로 선택
-3. *Source URL* 에 아래 raw 주소 입력
+### Greasy Fork 동기화 설정 (이미 적용됨)
 
-   ```
-   https://raw.githubusercontent.com/ttop32/naver-works-calculator/main/naver-works-calculator.user.js
-   ```
+[스크립트 관리 페이지](https://greasyfork.org/ko/scripts/505884-naver-works-calculator/admin) 의
+*소스 동기화* 에 아래가 걸려 있습니다. 동기화 방식은 **자동**.
 
-4. 저장
+| 항목 | URL |
+| --- | --- |
+| 스크립트 코드 | `.../main/naver-works-calculator.user.js` |
+| 기본 추가 정보 (설명, Markdown) | `.../main/docs/description.md` |
 
-이후 Greasy Fork 가 주기적으로(보통 하루 1회) 원본을 확인해 버전이 올라갔으면 새 버전을 게시합니다.
-즉시 반영하고 싶으면 같은 Sync 탭의 **Update from source** 버튼을 누릅니다.
+모두 `https://raw.githubusercontent.com/ttop32/naver-works-calculator` 기준입니다.
+즉시 반영이 필요하면 같은 화면의 **설정 업데이트 및 지금 동기화** 버튼을 누릅니다.
+(raw.githubusercontent.com 캐시가 5분쯤 있어서, push 직후 눌러도 "변경 사항 없음" 이 나올 수 있습니다.)
 
 > 주의: Greasy Fork 는 `@version` 이 **올라간 경우에만** 새 버전으로 인정합니다.
 > 그래서 CI 가 "스크립트는 바뀌었는데 버전이 그대로"인 커밋을 실패시킵니다.
@@ -58,9 +60,9 @@ Greasy Fork 에서 설치합니다 (Tampermonkey 필요):
 
 ```bash
 npm run validate    # 문법 + 메타데이터 검사
-npm run bump        # 0.0.18 -> 0.0.19 (patch)
-npm run bump:minor  # 0.0.18 -> 0.1.0
-npm run bump:major  # 0.0.18 -> 1.0.0
+npm run bump        # 0.0.19 -> 0.0.20 (patch)
+npm run bump:minor  # 0.0.19 -> 0.1.0
+npm run bump:major  # 0.0.19 -> 1.0.0
 ```
 
 로컬에서 테스트할 때는 Tampermonkey 대시보드에서 이 저장소의 `naver-works-calculator.user.js`
